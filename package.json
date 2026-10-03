@@ -1,0 +1,8 @@
+{
+  "name": "ghostwriter",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}
