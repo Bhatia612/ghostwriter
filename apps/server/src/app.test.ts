@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { createApp } from "./app.js";
+import { redis, testConfig, useTestRedis } from "./test/setup.js";
 
 describe("app", () => {
-  const app = createApp();
+  useTestRedis();
+  const app = createApp({ config: testConfig, redis });
 
   it("GET /health returns ok", async () => {
     const res = await request(app).get("/health");

@@ -1,7 +1,13 @@
+import { createClient, type RedisClientType } from "redis";
 import { createApp } from "./app.js";
+import { loadConfig } from "./config.js";
 
-const port = Number(process.env.PORT ?? 3000);
+const config = loadConfig();
 
-createApp().listen(port, () => {
-    console.log(`ghostwriter server listening on port ${port}`);
+const redis: RedisClientType = createClient({ url: config.redisUrl });
+redis.on("error", (err) => console.error("redis error", err));
+await redis.connect();
+
+createApp({ config, redis }).listen(config.port, () => {
+    console.log(`ghostwriter server listening on port ${config.port}`);
 });
