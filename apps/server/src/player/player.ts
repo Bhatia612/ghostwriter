@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { RequestHandler } from "express";
+import { isUuid } from "../lib/uuid.js";
 
 export const PLAYER_COOKIE = "gw_player";
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-const UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 declare module "express-serve-static-core" {
     interface Request {
@@ -16,7 +15,7 @@ export function playerIdentity(opts: { secure: boolean }): RequestHandler {
     return (req, res, next) => {
         const existing: unknown = req.cookies?.[PLAYER_COOKIE];
 
-        if (typeof existing === "string" && UUID_RE.test(existing)) {
+        if (isUuid(existing)) {
             req.playerId = existing;
             return next();
         }

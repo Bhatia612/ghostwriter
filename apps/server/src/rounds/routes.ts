@@ -6,12 +6,13 @@ import { utcDateKey } from "../daily/date.js";
 import { dailyPassage, generatePassage } from "../daily/passage.js";
 import type { Keys } from "./keys.js";
 
+import { submitRound } from "./submit.js";
+
 const createRoundBody = z.object({
     mode: z.enum(["ranked", "practice"]),
 });
 
-// Redis keeps rounds a while after they expire, so a late submit gets
-// "expired" instead of "not found". The expiresAt field is the real rule.
+
 const ROUND_CLEANUP_GRACE_SECONDS = 60 * 60;
 const ATTEMPT_KEY_TTL_SECONDS = 48 * 60 * 60;
 
@@ -87,6 +88,8 @@ export function roundsRouter(deps: RoundDeps) {
             expiresAt: expiresAt.toISOString(),
         });
     });
+
+    router.post("/:roundId/submit", submitRound(deps));
 
     return router;
 }
