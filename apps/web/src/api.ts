@@ -1,3 +1,5 @@
+import type { KeystrokeLog, ScoreResult } from "@ghostwriter/scoring";
+
 export type Mode = "ranked" | "practice";
 
 export interface Round {
@@ -7,6 +9,7 @@ export interface Round {
     passage: string;
     expiresAt: string;
 }
+
 
 export class ApiError extends Error {
     readonly status: number;
@@ -36,7 +39,8 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
             if (data && typeof data === "object" && "error" in data && typeof data.error === "string") {
                 code = data.error;
             }
-        } catch { }
+        } catch {
+        }
         throw new ApiError(res.status, code);
     }
 
@@ -45,4 +49,36 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 
 export function startRound(mode: Mode): Promise<Round> {
     return postJson<Round>("/rounds", { mode });
+}
+
+export interface SubmitResponse {
+    roundId: string;
+    mode: Mode;
+    date: string;
+    result: ScoreResult;
+    replayed: boolean;
+}
+
+export interface SubmitOptions {
+    attempts?: number;
+    wait?: (ms: number) => Promise<void>;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+
+export async function submitRound(
+    roundId: string,
+    log: KeystrokeLog,
+    { attempts = 3, wait = sleep }: SubmitOptions = {}
+): Promise<SubmitResponse> {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await postJson<SubmitResponse>(`/rounds/${encodeURIComponent(roundId)}/submit`, { log });
+        } catch (err) {
+            const retryable = !(err instanceof ApiError) || err.status >= 500;
+            if (!retryable || attempt >= attempts) throw err;
+            await wait(250 * 2 ** (attempt - 1));
+        }
+    }
 }

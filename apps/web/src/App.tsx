@@ -1,13 +1,18 @@
 import { useCallback, useState } from "react";
 import type { KeystrokeLog } from "@ghostwriter/scoring";
-import { ApiError, startRound, type Mode, type Round } from "./api.ts";
+import { ApiError, startRound, submitRound, type Mode, type Round, type SubmitResponse } from "./api.ts";
 import HomeScreen, { type HomeError } from "./home/HomeScreen.tsx";
+import ResultsScreen from "./results/ResultsScreen.tsx";
 import TypingScreen from "./typing/TypingScreen.tsx";
+
+type SubmitError = { message: string; canRetry: boolean };
 
 type State =
   | { kind: "home"; starting: Mode | null; error: HomeError | null }
   | { kind: "typing"; round: Round }
-  | { kind: "finished"; round: Round; log: KeystrokeLog };
+  | { kind: "submitting"; round: Round; log: KeystrokeLog }
+  | { kind: "results"; round: Round; log: KeystrokeLog; response: SubmitResponse }
+  | { kind: "submit-failed"; round: Round; log: KeystrokeLog; error: SubmitError };
 
 function toHomeError(err: unknown): HomeError {
   if (err instanceof ApiError) {
@@ -15,6 +20,21 @@ function toHomeError(err: unknown): HomeError {
     return { kind: "other", message: `The server said no (${err.code}).` };
   }
   return { kind: "network" };
+}
+
+function toSubmitError(err: unknown): SubmitError {
+  if (err instanceof ApiError) {
+    if (err.code === "round_expired") {
+      return { message: "This run took too long, so it expired and wasn't scored.", canRetry: false };
+    }
+    if (err.code === "implausible_timing") {
+      return { message: "The server couldn't verify this run's timing, so it wasn't scored.", canRetry: false };
+    }
+    if (err.status < 500) return { message: `The server rejected this run (${err.code}).`, canRetry: false };
+  }
+  // Network down or a server error, even after retrying. Retrying later is safe:
+  // the server returns the original result if it already scored this run.
+  return { message: "Couldn't send your run. Your keystrokes are kept here, so nothing is lost.", canRetry: true };
 }
 
 export default function App() {
@@ -35,10 +55,27 @@ export default function App() {
     }
   }, []);
 
-  // Stable identity, so the typing screen doesn't re-attach its key listener every render.
-  const finish = useCallback((log: KeystrokeLog) => {
-    setState((s) => (s.kind === "typing" ? { kind: "finished", round: s.round, log } : s));
+  const send = useCallback(async (round: Round, log: KeystrokeLog) => {
+    setState({ kind: "submitting", round, log });
+    try {
+      const response = await submitRound(round.roundId, log);
+      setState({ kind: "results", round, log, response });
+    } catch (err) {
+      setState({ kind: "submit-failed", round, log, error: toSubmitError(err) });
+    }
   }, []);
+
+  // Stable while a run is in progress, so the typing screen keeps one key listener.
+  const typingRound = state.kind === "typing" ? state.round : null;
+  const finish = useCallback(
+    (log: KeystrokeLog) => {
+      if (typingRound) void send(typingRound, log);
+    },
+    [typingRound, send]
+  );
+
+  const practice = useCallback(() => void start("practice"), [start]);
+  const goHome = useCallback(() => setState({ kind: "home", starting: null, error: null }), []);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -59,18 +96,52 @@ export default function App() {
               </span>
             </header>
 
-            <main className="flex flex-1 flex-col justify-center pb-14">
-              {state.kind === "typing" && <TypingScreen passage={state.round.passage} onFinish={finish} />}
-              {state.kind === "finished" && (
-                <section className="mx-auto w-[46ch]">
-                  <h2 className="m-0 font-display text-title font-normal">Finished</h2>
-                  <p className="mt-3 text-body text-ink-2">
-                    {state.log.length} keystrokes recorded. Sending them to the server for scoring is the next
-                    step.
+            {state.kind === "results" ? (
+              <ResultsScreen
+                round={state.round}
+                log={state.log}
+                response={state.response}
+                onPractice={practice}
+                onHome={goHome}
+              />
+            ) : (
+              <main className="flex flex-1 flex-col justify-center pb-14">
+                {state.kind === "typing" && <TypingScreen passage={state.round.passage} onFinish={finish} />}
+
+                {state.kind === "submitting" && (
+                  <p className="mx-auto w-[46ch] font-display text-title italic text-ink-2" role="status">
+                    Sending your run for scoring…
                   </p>
-                </section>
-              )}
-            </main>
+                )}
+
+                {state.kind === "submit-failed" && (
+                  <section className="mx-auto w-[46ch]">
+                    <p role="alert" className="m-0 bg-wrong-bg px-6 py-4 font-display text-body leading-normal text-wrong">
+                      {state.error.message}
+                    </p>
+                    <div className="mt-8 flex gap-4">
+                      {state.error.canRetry && (
+                        <button
+                          type="button"
+                          autoFocus
+                          onClick={() => void send(state.round, state.log)}
+                          className="cursor-pointer rounded-[2px] border border-ink bg-ink px-6 py-3 font-display text-body text-paper focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-caret"
+                        >
+                          Try again
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={goHome}
+                        className="cursor-pointer rounded-[2px] border border-ink px-6 py-3 font-display text-body text-ink focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-caret"
+                      >
+                        Home
+                      </button>
+                    </div>
+                  </section>
+                )}
+              </main>
+            )}
           </div>
         )}
       </div>

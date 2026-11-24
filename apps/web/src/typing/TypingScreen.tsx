@@ -70,7 +70,7 @@ export default function TypingScreen({ passage, onFinish, now }: Props) {
 
   return (
     <div className="mx-auto w-[46ch] font-mono text-passage">
-      <p className="mb-6 min-h-[1.5em] font-display text-body italic text-ink-2">
+      <p className="mb-6 min-h-[1.5em] font-display text-body italic text-ink-2" data-testid="hint">
         {log.length === 0 ? "Start typing. The clock starts on your first key." : ""}
       </p>
 

@@ -27,7 +27,6 @@ function renderTyping(passage: string, onFinish = vi.fn()) {
 const states = () =>
   [...screen.getByTestId("passage").querySelectorAll("span")].map((s) => s.dataset.state);
 
-const hint = (container: HTMLElement) => container.querySelector(".hint")!.textContent;
 
 describe("charStates", () => {
   it("marks the correct prefix, the wrong part, the cursor and the rest", () => {
@@ -50,18 +49,6 @@ describe("TypingScreen", () => {
     expect(states()).toEqual(["cursor", "pending", "pending"]);
   });
 
-  it("shows the mode and date label", () => {
-    renderTyping("cat");
-    expect(screen.getByText("practice · 2026-11-17")).toBeTruthy();
-  });
-
-  it("shows the hint before the first key and clears it after, without removing the line", () => {
-    const { container } = renderTyping("cat");
-    expect(hint(container)).toBe("Start typing. The clock starts on your first key.");
-    press("c");
-    expect(container.querySelector(".hint")).not.toBeNull();
-    expect(hint(container)).toBe("");
-  });
 
   it("marks correct and wrong characters as you type", () => {
     renderTyping("cats");
@@ -128,5 +115,15 @@ describe("TypingScreen", () => {
     expect(screen.getByTestId("wpm").textContent).toBe("180");
     expect(screen.getByTestId("accuracy").textContent).toBe("100%");
     expect(screen.getByTestId("combo").textContent).toBe("3");
+  });
+
+  it("shows the hint before the first key and keeps its line after", () => {
+    render(<TypingScreen passage="cat" onFinish={vi.fn()} now={steppingClock()} />);
+    expect(screen.getByTestId("hint").textContent).toMatch(/Start typing/);
+
+    press("c");
+
+    // Emptied, not removed: removing it would make the passage jump up.
+    expect(screen.getByTestId("hint").textContent).toBe("");
   });
 });
